@@ -1,0 +1,193 @@
+#include "MarchTables.compute"
+bool isEqual(float3 a, float3 b)
+{
+    return (a.x == b.x && a.y == b.y && a.z == b.z) ;
+}
+float3 interpolateVerts(float4 v1, float4 v2);
+float3 interpolateGradients(float4 v1, float4 v2);
+float3 gradient(uint x, uint y, uint z);
+
+RWStructuredBuffer<uint> counterBuffer;
+uint resolution;
+float isoLevel;
+float threashold;
+bool shouldInterpolate;
+Texture3D<float> volumetricData;
+RWStructuredBuffer<float3> vertices;
+RWStructuredBuffer<float3> normals;
+#pragma kernel March
+[numthreads(8,8,8)]
+void March (uint3 id : SV_DispatchThreadID)
+{
+    if(id.x >= resolution - 1 || id.y >= resolution - 1 || id.z >= resolution - 1 )return;
+
+    int3 cornerIndices[8] = {
+        int3(id.x, id.y, id.z),
+        int3(id.x + 1, id.y, id.z),
+        int3(id.x + 1, id.y, id.z + 1),
+        int3(id.x, id.y, id.z + 1),
+        int3(id.x, id.y + 1, id.z),
+        int3(id.x + 1, id.y + 1, id.z),
+        int3(id.x + 1, id.y + 1, id.z + 1),
+        int3(id.x, id.y + 1, id.z + 1)
+    };
+
+    float4 cubeCorners[8] = {
+        float4((float3)cornerIndices[0] / (resolution - 1), volumetricData[cornerIndices[0]]),
+        float4((float3)cornerIndices[1] / (resolution - 1), volumetricData[cornerIndices[1]]),
+        float4((float3)cornerIndices[2] / (resolution - 1), volumetricData[cornerIndices[2]]),
+        float4((float3)cornerIndices[3] / (resolution - 1), volumetricData[cornerIndices[3]]),
+        float4((float3)cornerIndices[4] / (resolution - 1), volumetricData[cornerIndices[4]]),
+        float4((float3)cornerIndices[5] / (resolution - 1), volumetricData[cornerIndices[5]]),
+        float4((float3)cornerIndices[6] / (resolution - 1), volumetricData[cornerIndices[6]]),
+        float4((float3)cornerIndices[7] / (resolution - 1), volumetricData[cornerIndices[7]])
+    };
+
+    int configurationIndex = 0;
+    if (cubeCorners[0].w > isoLevel) configurationIndex |= 1;
+    if (cubeCorners[1].w > isoLevel) configurationIndex |= 2;
+    if (cubeCorners[2].w > isoLevel) configurationIndex |= 4;
+    if (cubeCorners[3].w > isoLevel) configurationIndex |= 8;
+    if (cubeCorners[4].w > isoLevel) configurationIndex |= 16;
+    if (cubeCorners[5].w > isoLevel) configurationIndex |= 32;
+    if (cubeCorners[6].w > isoLevel) configurationIndex |= 64;
+    if (cubeCorners[7].w > isoLevel) configurationIndex |= 128;
+    
+    float4 gradients[8] =
+    {
+        float4(gradient(id.x, id.y, id.z), cubeCorners[0].w),
+        float4(gradient(id.x + 1, id.y, id.z), cubeCorners[1].w),
+        float4(gradient(id.x + 1, id.y, id.z + 1), cubeCorners[2].w),
+        float4(gradient(id.x, id.y, id.z + 1), cubeCorners[3].w),
+        float4(gradient(id.x, id.y + 1, id.z), cubeCorners[4].w),
+        float4(gradient(id.x + 1, id.y + 1, id.z), cubeCorners[5].w),
+        float4(gradient(id.x + 1, id.y + 1, id.z + 1), cubeCorners[6].w),
+        float4(gradient(id.x, id.y + 1, id.z + 1), cubeCorners[7].w)
+    };
+
+    for (int i = 0; triangulation[configurationIndex][i] != -1; i +=3) 
+    {
+        int a0 = cornerIndexAFromEdge[triangulation[configurationIndex][i]];
+        int b0 = cornerIndexBFromEdge[triangulation[configurationIndex][i]];
+        int a1 = cornerIndexAFromEdge[triangulation[configurationIndex][i+1]];
+        int b1 = cornerIndexBFromEdge[triangulation[configurationIndex][i+1]];
+        int a2 = cornerIndexAFromEdge[triangulation[configurationIndex][i+2]];
+        int b2 = cornerIndexBFromEdge[triangulation[configurationIndex][i+2]];
+        
+        float3 a = interpolateVerts(cubeCorners[a0], cubeCorners[b0]) - float3(0.5, 0.5, 0.5);
+        float3 b = interpolateVerts(cubeCorners[a1], cubeCorners[b1]) - float3(0.5, 0.5, 0.5);
+        float3 c = interpolateVerts(cubeCorners[a2], cubeCorners[b2]) - float3(0.5, 0.5, 0.5);
+
+        if (isEqual(a, b) || isEqual(a, c) || isEqual(b, c))
+            continue;
+        
+        int ind;
+        InterlockedAdd(counterBuffer[0], 3, ind);
+        vertices[ind] = a;
+        vertices[ind + 1] = b;
+        vertices[ind + 2] = c;
+        
+        normals[ind] = normalize(interpolateGradients(gradients[a0], gradients[b0]));
+        normals[ind + 1] = normalize(interpolateGradients(gradients[a1], gradients[b1]));
+        normals[ind + 2] = normalize(interpolateGradients(gradients[a2], gradients[b2]));
+    }
+}
+
+#pragma kernel GetMarchTriangleCount
+[numthreads(8,8,8)]
+void GetMarchTriangleCount (uint3 id : SV_DispatchThreadID)
+{
+    if(id.x >= resolution - 1 || id.y >= resolution - 1 || id.z >= resolution - 1 )return;
+
+    int3 cornerIndices[8] = {
+        int3(id.x, id.y, id.z),
+        int3(id.x + 1, id.y, id.z),
+        int3(id.x + 1, id.y, id.z + 1),
+        int3(id.x, id.y, id.z + 1),
+        int3(id.x, id.y + 1, id.z),
+        int3(id.x + 1, id.y + 1, id.z),
+        int3(id.x + 1, id.y + 1, id.z + 1),
+        int3(id.x, id.y + 1, id.z + 1)
+    };
+
+    float4 cubeCorners[8] = {
+        float4((float3)cornerIndices[0] / (resolution - 1), volumetricData[cornerIndices[0]]),
+        float4((float3)cornerIndices[1] / (resolution - 1), volumetricData[cornerIndices[1]]),
+        float4((float3)cornerIndices[2] / (resolution - 1), volumetricData[cornerIndices[2]]),
+        float4((float3)cornerIndices[3] / (resolution - 1), volumetricData[cornerIndices[3]]),
+        float4((float3)cornerIndices[4] / (resolution - 1), volumetricData[cornerIndices[4]]),
+        float4((float3)cornerIndices[5] / (resolution - 1), volumetricData[cornerIndices[5]]),
+        float4((float3)cornerIndices[6] / (resolution - 1), volumetricData[cornerIndices[6]]),
+        float4((float3)cornerIndices[7] / (resolution - 1), volumetricData[cornerIndices[7]])
+    };
+
+    int configurationIndex = 0;
+    if (cubeCorners[0].w > isoLevel) configurationIndex |= 1;
+    if (cubeCorners[1].w > isoLevel) configurationIndex |= 2;
+    if (cubeCorners[2].w > isoLevel) configurationIndex |= 4;
+    if (cubeCorners[3].w > isoLevel) configurationIndex |= 8;
+    if (cubeCorners[4].w > isoLevel) configurationIndex |= 16;
+    if (cubeCorners[5].w > isoLevel) configurationIndex |= 32;
+    if (cubeCorners[6].w > isoLevel) configurationIndex |= 64;
+    if (cubeCorners[7].w > isoLevel) configurationIndex |= 128;
+    
+    int vertexCount = 0;
+    for (int i = 0; triangulation[configurationIndex][i] != -1; i +=3) 
+    {
+        int a0 = cornerIndexAFromEdge[triangulation[configurationIndex][i]];
+        int b0 = cornerIndexBFromEdge[triangulation[configurationIndex][i]];
+        int a1 = cornerIndexAFromEdge[triangulation[configurationIndex][i + 1]];
+        int b1 = cornerIndexBFromEdge[triangulation[configurationIndex][i + 1]];
+        int a2 = cornerIndexAFromEdge[triangulation[configurationIndex][i + 2]];
+        int b2 = cornerIndexBFromEdge[triangulation[configurationIndex][i + 2]];
+        
+        float3 a = interpolateVerts(cubeCorners[a0], cubeCorners[b0]);
+        float3 b = interpolateVerts(cubeCorners[a1], cubeCorners[b1]);
+        float3 c = interpolateVerts(cubeCorners[a2], cubeCorners[b2]);
+        if (isEqual(a, b) || isEqual(a, c) || isEqual(b, c))
+            continue;
+        vertexCount+=3;
+    }
+    InterlockedAdd(counterBuffer[0], vertexCount);
+}
+
+float3 interpolateVerts(float4 v1, float4 v2) {
+    if(!shouldInterpolate)
+    {
+        return (v1.xyz + v2.xyz) * 0.5;
+    }
+    float t = (isoLevel - v1.w) / (v2.w - v1.w);
+    
+    if (t < threashold)
+        t = 0;
+    else if(t > 1.0 - threashold)
+        t = 1;
+
+    return v1.xyz + t * (v2.xyz-v1.xyz);
+}
+float3 interpolateGradients(float4 v1, float4 v2)
+{
+    if (!shouldInterpolate)
+    {
+        return (v1.xyz + v2.xyz) * 0.5;
+    }
+    float t = (isoLevel - v1.w) / (v2.w - v1.w);
+    if (t < threashold)
+        t = 0;
+    else if (t > 1.0 - threashold)
+        t = 1;
+    
+    return v1.xyz + t * (v2.xyz - v1.xyz);
+}
+float v(uint x, uint y, uint z)
+{
+    return volumetricData[uint3(x, y, z)];
+}
+float3 gradient(uint x, uint y, uint z)
+{
+    return float3(
+            v(max(x - 1, 0), y, z) - v(min(x + 1, resolution - 1), y, z),
+            v(x, max(y - 1, 0), z) - v(x, min(y + 1, resolution - 1), z),
+            v(x, y, max(z - 1, 0)) - v(x, y, min(z + 1, resolution - 1))
+        );
+}

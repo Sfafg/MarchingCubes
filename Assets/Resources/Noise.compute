@@ -1,0 +1,258 @@
+// Based on https://mrl.cs.nyu.edu/~perlin/noise/
+static const int p[512] = { 151,160,137,91,90,15,
+131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,
+190, 6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,
+88,237,149,56,87,174,20,125,136,171,168, 68,175,74,165,71,134,139,48,27,166,
+77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,
+102,143,54, 65,25,63,161, 1,216,80,73,209,76,132,187,208, 89,18,169,200,196,
+135,130,116,188,159,86,164,100,109,198,173,186, 3,64,52,217,226,250,124,123,
+5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,
+223,183,170,213,119,248,152, 2,44,154,163, 70,221,153,101,155,167, 43,172,9,
+129,22,39,253, 19,98,108,110,79,113,224,232,178,185, 112,104,218,246,97,228,
+251,34,242,193,238,210,144,12,191,179,162,241, 81,51,145,235,249,14,239,107,
+49,192,214, 31,181,199,106,157,184, 84,204,176,115,121,50,45,127, 4,150,254,
+138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180,
+151,160,137,91,90,15,
+131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,
+190, 6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,
+88,237,149,56,87,174,20,125,136,171,168, 68,175,74,165,71,134,139,48,27,166,
+77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,
+102,143,54, 65,25,63,161, 1,216,80,73,209,76,132,187,208, 89,18,169,200,196,
+135,130,116,188,159,86,164,100,109,198,173,186, 3,64,52,217,226,250,124,123,
+5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,
+223,183,170,213,119,248,152, 2,44,154,163, 70,221,153,101,155,167, 43,172,9,
+129,22,39,253, 19,98,108,110,79,113,224,232,178,185, 112,104,218,246,97,228,
+251,34,242,193,238,210,144,12,191,179,162,241, 81,51,145,235,249,14,239,107,
+49,192,214, 31,181,199,106,157,184, 84,204,176,115,121,50,45,127, 4,150,254,
+138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180
+};
+
+float fade(float t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+float gradient(int hash, float x, float y, float z) 
+{
+   int h = hash & 15;
+   float u = h<8 ? x : y;
+   float v = h<4 ? y : h==12||h==14 ? x : z;
+
+   return ((h&1) == 0 ? u : -u) + ((h&2) == 0 ? v : -v);
+}
+float Perlin(float3 coords)
+{
+    int X = (int)floor(coords.x) & 255;
+    int Y = (int)floor(coords.y) & 255;
+    int Z = (int)floor(coords.z) & 255;
+
+    float x = coords.x - floor(coords.x);
+    float y = coords.y - floor(coords.y);
+    float z = coords.z - floor(coords.z);
+
+    float u = fade(x);
+    float v = fade(y);
+    float w = fade(z);
+
+    int A  = p[X    ] + Y;
+    int AA = p[A    ] + Z;
+    int AB = p[A + 1] + Z;
+    int B  = p[X + 1] + Y;
+    int BA = p[B    ] + Z;
+    int BB = p[B + 1] + Z;
+    
+    float p1,p2;
+
+    p1 = lerp(gradient(p[AA], x, y, z), gradient(p[BA], x - 1, y, z), u);
+    p2 = lerp(gradient(p[AB], x, y - 1, z), gradient(p[BB], x - 1, y - 1, z), u);
+    float pp1 = lerp(p1, p2, v);
+
+    p1 = lerp(gradient(p[AA + 1], x, y, z - 1), gradient(p[BA + 1], x - 1, y, z - 1), u);
+    p2 = lerp(gradient(p[AB + 1], x, y - 1, z - 1), gradient(p[BB + 1], x - 1, y - 1, z - 1), u);
+    float pp2 = lerp(p1, p2, v);
+
+    return lerp(pp1, pp2, w) * 0.433012701892 + 0.5;
+}
+
+float mag(float3 a){return dot(a,a);}
+float3 vec(int x, int y, int z){
+    float3 c = float3(x,y,z);
+    x &= 254 + 1;
+    y &= 254 + 1;
+    z &= 254 + 1;
+
+    x = p[p[x] + y] + z;
+    y = p[x];
+    z = p[y];
+
+    return c + float3(p[x],p[y],p[z]) / 255.;
+}
+float Vorley(float3 coords)
+{
+    int X = (int)floor(coords.x);
+    int Y = (int)floor(coords.y);
+    int Z = (int)floor(coords.z);
+
+    float minDist = 0xFFFFFFFF;
+    minDist = min(mag(vec(X - 1, Y - 1, Z - 1) - coords), minDist); 
+    minDist = min(mag(vec(X    , Y - 1, Z - 1) - coords), minDist); 
+    minDist = min(mag(vec(X + 1, Y - 1, Z - 1) - coords), minDist); 
+    minDist = min(mag(vec(X - 1, Y    , Z - 1) - coords), minDist); 
+    minDist = min(mag(vec(X    , Y    , Z - 1) - coords), minDist); 
+    minDist = min(mag(vec(X + 1, Y    , Z - 1) - coords), minDist); 
+    minDist = min(mag(vec(X - 1, Y + 1, Z - 1) - coords), minDist); 
+    minDist = min(mag(vec(X    , Y + 1, Z - 1) - coords), minDist); 
+    minDist = min(mag(vec(X + 1, Y + 1, Z - 1) - coords), minDist); 
+    minDist = min(mag(vec(X - 1, Y - 1, Z    ) - coords), minDist); 
+    minDist = min(mag(vec(X    , Y - 1, Z    ) - coords), minDist); 
+    minDist = min(mag(vec(X + 1, Y - 1, Z    ) - coords), minDist); 
+    minDist = min(mag(vec(X - 1, Y    , Z    ) - coords), minDist); 
+    minDist = min(mag(vec(X    , Y    , Z    ) - coords), minDist); 
+    minDist = min(mag(vec(X + 1, Y    , Z    ) - coords), minDist); 
+    minDist = min(mag(vec(X - 1, Y + 1, Z    ) - coords), minDist); 
+    minDist = min(mag(vec(X    , Y + 1, Z    ) - coords), minDist); 
+    minDist = min(mag(vec(X + 1, Y + 1, Z    ) - coords), minDist); 
+    minDist = min(mag(vec(X - 1, Y - 1, Z + 1) - coords), minDist); 
+    minDist = min(mag(vec(X    , Y - 1, Z + 1) - coords), minDist); 
+    minDist = min(mag(vec(X + 1, Y - 1, Z + 1) - coords), minDist); 
+    minDist = min(mag(vec(X - 1, Y    , Z + 1) - coords), minDist); 
+    minDist = min(mag(vec(X    , Y    , Z + 1) - coords), minDist); 
+    minDist = min(mag(vec(X + 1, Y    , Z + 1) - coords), minDist); 
+    minDist = min(mag(vec(X - 1, Y + 1, Z + 1) - coords), minDist); 
+    minDist = min(mag(vec(X    , Y + 1, Z + 1) - coords), minDist); 
+    minDist = min(mag(vec(X + 1, Y + 1, Z + 1) - coords), minDist); 
+
+    return sqrt(minDist) / sqrt(2);
+}
+
+#define FractalNoise(outputTotal, type, coordinates, offset, octaves, scale, amplitude, lacunarity, persistance)\
+{\
+    float freq = scale;\
+    float amp = amplitude;\
+    for(int i = 0; i < octaves; i++)\
+    {\
+        noiseTotal += type(coordinates * freq + offset) * amp;\
+        freq *= lacunarity;\
+        amp *= persistance;\
+    }\
+}
+
+#define FractalRidgeNoise(outputTotal, type, coordinates, offset, octaves, scale, amplitude, lacunarity, persistance)\
+{\
+    float freq = scale;\
+    float amp = amplitude;\
+    float w = 1;\
+    for(int i = 0; i < octaves; i++)\
+    {\
+        float n = (1 - abs(type(coordinates * freq + offset) - 0.5) * 2) * w;\
+        noiseTotal += n * amp;\
+        w = n;\
+        freq *= lacunarity;\
+        amp *= persistance;\
+    }\
+}
+
+uint resolution;
+RWTexture3D<float> noiseValues;
+
+#pragma kernel SetValue
+float value;
+[numthreads(8,8,8)]
+void SetValue (uint3 id : SV_DispatchThreadID)
+{
+    if(id.x >= resolution || id.y >= resolution || id.z >= resolution)return;
+
+    noiseValues[id.xyz] = value;
+}
+float3 chunkPosition;
+float3 chunkScale;
+
+#pragma kernel SphereDist
+float radious;
+float distFallof;
+[numthreads(8,8,8)]
+void SphereDist (uint3 id : SV_DispatchThreadID)
+{
+    if(id.x >= resolution || id.y >= resolution || id.z >= resolution)return;
+
+    float3 coordinates = (float3)id / (resolution - 1) * chunkScale + chunkPosition;
+
+    noiseValues[id.xyz] -= (length(coordinates) - radious) * distFallof;
+}
+
+float3 offset;
+float scale;
+float amplitude;
+float lacunarity;
+float persistance;
+int octaves;
+
+#pragma kernel PerlinSimple
+[numthreads(8,8,8)]
+void PerlinSimple (uint3 id : SV_DispatchThreadID)
+{
+    if(id.x >= resolution || id.y >= resolution || id.z >= resolution)return;
+
+    float3 coordinates = (float3)id / (resolution - 1) * chunkScale + chunkPosition;
+    float noiseTotal = 0;
+    FractalNoise(noiseTotal, Perlin, coordinates, offset, octaves, scale, amplitude, lacunarity, persistance)
+
+    noiseValues[id.xyz] += noiseTotal;
+}
+#pragma kernel PerlinRidge
+[numthreads(8,8,8)]
+void PerlinRidge (uint3 id : SV_DispatchThreadID)
+{
+    if(id.x >= resolution || id.y >= resolution || id.z >= resolution)return;
+
+    float3 coordinates = (float3)id / (resolution - 1) * chunkScale + chunkPosition;
+    float noiseTotal = 0;
+    FractalRidgeNoise(noiseTotal, Perlin, coordinates, offset, octaves, scale, amplitude, lacunarity, persistance)
+
+    noiseValues[id.xyz] += noiseTotal;
+}
+#pragma kernel PerlinMask
+[numthreads(8,8,8)]
+void PerlinMask (uint3 id : SV_DispatchThreadID)
+{
+    if(id.x >= resolution || id.y >= resolution || id.z >= resolution)return;
+
+    float3 coordinates = (float3)id / (resolution - 1) * chunkScale + chunkPosition;
+    float noiseTotal = 0;
+    FractalNoise(noiseTotal, Perlin, coordinates, offset, octaves, scale, amplitude, lacunarity, persistance)
+
+    noiseValues[id.xyz] *= saturate(noiseTotal);
+}
+
+#pragma kernel VorleySimple
+[numthreads(8,8,8)]
+void VorleySimple (uint3 id : SV_DispatchThreadID)
+{
+    if(id.x >= resolution || id.y >= resolution || id.z >= resolution)return;
+
+    float3 coordinates = (float3)id / (resolution - 1) * chunkScale + chunkPosition;
+    float noiseTotal = 0;
+    FractalNoise(noiseTotal, Vorley, coordinates, offset, octaves, scale, amplitude, lacunarity, persistance)
+
+    noiseValues[id.xyz] += noiseTotal;
+}
+#pragma kernel VorleyRidge
+[numthreads(8,8,8)]
+void VorleyRidge (uint3 id : SV_DispatchThreadID)
+{
+    if(id.x >= resolution || id.y >= resolution || id.z >= resolution)return;
+
+    float3 coordinates = (float3)id / (resolution - 1) * chunkScale + chunkPosition;
+    float noiseTotal = 0;
+    FractalRidgeNoise(noiseTotal, Vorley, coordinates, offset, octaves, scale, amplitude, lacunarity, persistance)
+
+    noiseValues[id.xyz] += noiseTotal;
+}
+#pragma kernel VorleyMask
+[numthreads(8,8,8)]
+void VorleyMask (uint3 id : SV_DispatchThreadID)
+{
+    if(id.x >= resolution || id.y >= resolution || id.z >= resolution)return;
+
+    float3 coordinates = (float3)id / (resolution - 1) * chunkScale + chunkPosition;
+    float noiseTotal = 0;
+    FractalNoise(noiseTotal, Vorley, coordinates, offset, octaves, scale, amplitude, lacunarity, persistance)
+
+    noiseValues[id.xyz] *= saturate(noiseTotal);
+}
