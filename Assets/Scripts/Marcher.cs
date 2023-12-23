@@ -20,13 +20,14 @@ public class Marcher : MonoBehaviour
 
     private ComputeShader noiseCompute;
     private ComputeShader marchingCompute;
+    private RenderTexture volumetricData;
     private void Start()
     {
         noiseCompute = (ComputeShader)Resources.Load("Noise", typeof(ComputeShader));
         marchingCompute = (ComputeShader)Resources.Load("MarchingCubes", typeof(ComputeShader));
         GetComponent<MeshFilter>().sharedMesh = GenerateMesh(baseResolution);
 
-        Benchmarker.Test("BaseLine.txt", new Mark[]
+        Benchmarker.Test("PersistantVolumetricData.txt", new Mark[]
         {
             new (() => GenerateMesh(baseResolution), 5),
             new (() => GenerateMesh(baseResolution / 2), 10),
@@ -78,14 +79,17 @@ public class Marcher : MonoBehaviour
     }
     private RenderTexture GenerateNoise(Vector3 position, Vector3 scale, int resolution)
     {
-        RenderTextureDescriptor desc = new(resolution, resolution, RenderTextureFormat.RFloat)
+        if (volumetricData == null || volumetricData.width != resolution)
         {
-            enableRandomWrite = true,
-            dimension = TextureDimension.Tex3D,
-            autoGenerateMips = false
-        };
-        RenderTexture volumetricData = new(desc) { volumeDepth = resolution };
-        volumetricData.Create();
+            RenderTextureDescriptor desc = new(resolution, resolution, RenderTextureFormat.RFloat)
+            {
+                enableRandomWrite = true,
+                dimension = TextureDimension.Tex3D,
+                autoGenerateMips = false
+            };
+            volumetricData = new(desc) { volumeDepth = resolution };
+            volumetricData.Create();
+        }
 
         // Generate noise values on GPU.
         int dispachSize = (int)Mathf.Ceil(resolution / 8f);
