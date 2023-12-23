@@ -1,50 +1,27 @@
-675,1556
-681,6802
-634,9811
-577,3134
-625,3157
-148,8008
-147,4266
-154,1624
-153,326
-155,5834
-156,8127
-155,9372
-155,8256
-145,8578
-147,9721
-54,50249
-40,67516
-50,00973
-42,92011
-42,91916
-54,15726
-68,72082
-46,49162
-57,07741
-45,62092
-58,8026
-67,11483
-67,75379
-62,85763
-52,35004
-11,23905
-11,42883
-18,63003
-10,32925
-13,30376
-14,68182
-12,48074
-15,00988
-24,5409
-11,2505
-14,21642
-15,67268
-10,97202
-18,26859
-11,10077
-14,02473
-15,43522
-10,99777
-22,51339
-14,3013
+[resolution: 256, sampleCount: 5]
+GenerateMesh: 0,183s
+	GenerateNoise:     0,072ms    0,04%
+	CountVertices:     0,053s     29,15%
+	GenerateTriangles: 0,043s     23,38%
+	Self:              0,087s     47,43%
+
+[resolution: 128, sampleCount: 10]
+GenerateMesh: 0,048s
+	GenerateNoise:     0,067ms    0,14%
+	CountVertices:     0,015s     30,39%
+	GenerateTriangles: 8,272ms    17,1%
+	Self:              0,025s     52,37%
+
+[resolution: 64, sampleCount: 15]
+GenerateMesh: 0,012s
+	GenerateNoise:     0,06ms     0,5%
+	CountVertices:     3,522ms    29,36%
+	GenerateTriangles: 2,211ms    18,43%
+	Self:              6,202ms    51,71%
+
+[resolution: 32, sampleCount: 20]
+GenerateMesh: 3,803ms
+	GenerateNoise:     0,041ms    1,08%
+	CountVertices:     1,165ms    30,63%
+	GenerateTriangles: 1,003ms    26,37%
+	Self:              1,594ms    41,91%

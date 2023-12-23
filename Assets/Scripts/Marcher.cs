@@ -1,8 +1,9 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.Rendering;
+
 [RequireComponent(typeof(MeshFilter))]
 public class Marcher : MonoBehaviour
 {
@@ -20,20 +21,19 @@ public class Marcher : MonoBehaviour
 
     private ComputeShader noiseCompute;
     private ComputeShader marchingCompute;
-    private RenderTexture volumetricData;
+    private Benchmarker benchmark;
     private void Start()
     {
         noiseCompute = (ComputeShader)Resources.Load("Noise", typeof(ComputeShader));
         marchingCompute = (ComputeShader)Resources.Load("MarchingCubes", typeof(ComputeShader));
         GetComponent<MeshFilter>().sharedMesh = GenerateMesh(baseResolution);
 
-        Benchmarker.Test("PersistantVolumetricData.txt", new Mark[]
-        {
-            new (() => GenerateMesh(baseResolution), 5),
-            new (() => GenerateMesh(baseResolution / 2), 10),
-            new (() => GenerateMesh(baseResolution / 4), 15),
-            new (() => GenerateMesh(baseResolution / 8), 20),
-        });
+        benchmark = new("BaseLine", GenerateMesh);
+        benchmark.Run(baseResolution, 5);
+        benchmark.Run(baseResolution / 2, 10);
+        benchmark.Run(baseResolution / 4, 15);
+        benchmark.Run(baseResolution / 8, 20);
+        benchmark.EndTest();
     }
     private void Update()
     {
@@ -79,17 +79,15 @@ public class Marcher : MonoBehaviour
     }
     private RenderTexture GenerateNoise(Vector3 position, Vector3 scale, int resolution)
     {
-        if (volumetricData == null || volumetricData.width != resolution)
+        float startTime = Time.realtimeSinceStartup;
+        RenderTextureDescriptor desc = new(resolution, resolution, RenderTextureFormat.RFloat)
         {
-            RenderTextureDescriptor desc = new(resolution, resolution, RenderTextureFormat.RFloat)
-            {
-                enableRandomWrite = true,
-                dimension = TextureDimension.Tex3D,
-                autoGenerateMips = false
-            };
-            volumetricData = new(desc) { volumeDepth = resolution };
-            volumetricData.Create();
-        }
+            enableRandomWrite = true,
+            dimension = TextureDimension.Tex3D,
+            autoGenerateMips = false
+        };
+        RenderTexture volumetricData = new(desc) { volumeDepth = resolution };
+        volumetricData.Create();
 
         // Generate noise values on GPU.
         int dispachSize = (int)Mathf.Ceil(resolution / 8f);
@@ -119,10 +117,12 @@ public class Marcher : MonoBehaviour
         noiseCompute.SetTexture(1, "noiseValues", volumetricData);
         noiseCompute.Dispatch(1, dispachSize, dispachSize, dispachSize);
 
+        benchmark?.SubFunction(Time.realtimeSinceStartup - startTime, MethodBase.GetCurrentMethod().Name);
         return volumetricData;
     }
     private int CountVertices(RenderTexture volumetricData)
     {
+        float startTime = Time.realtimeSinceStartup;
         int resolution = volumetricData.width;
         int dispachSize = (int)Mathf.Ceil((resolution - 1) / 8f);
 
@@ -140,10 +140,12 @@ public class Marcher : MonoBehaviour
         int[] c = new int[1];
         counterBuffer.GetData(c);
         counterBuffer.Release();
+        benchmark?.SubFunction(Time.realtimeSinceStartup - startTime, MethodBase.GetCurrentMethod().Name);
         return c[0];
     }
     private void GenerateTriangles(ref Vector3[] vertices, ref Vector3[] normals, ref int[] indices, RenderTexture volumetricData)
     {
+        float startTime = Time.realtimeSinceStartup;
         int resolution = volumetricData.width;
         int dispachSize = (int)Mathf.Ceil((resolution - 1) / 4f);
         ComputeBuffer vertexBuffer = new(vertices.Length, sizeof(float) * 3, ComputeBufferType.Structured);
@@ -169,6 +171,12 @@ public class Marcher : MonoBehaviour
         normalBuffer.Release();
         counterBuffer.Release();
 
+        benchmark?.SubFunction(Time.realtimeSinceStartup - startTime, MethodBase.GetCurrentMethod().Name);
+    }
+    private void OptymizeMesh(ref Vector3[] vertices, ref Vector3[] normals, ref int[] indices)
+    {
+        float startTime = Time.realtimeSinceStartup;
+
         int deletedCount = 0;
         Dictionary<Vector3, int> uniqueVertices = new(vertices.Length);
         List<Vector3> uniqueNormals = new(normals.Length);
@@ -188,5 +196,6 @@ public class Marcher : MonoBehaviour
         }
         vertices = uniqueVertices.Keys.ToArray();
         normals = uniqueNormals.ToArray();
+        benchmark?.SubFunction(Time.realtimeSinceStartup - startTime, MethodBase.GetCurrentMethod().Name);
     }
 }
